@@ -46,6 +46,9 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
   double bmiResult = 0.0;
   double idealWeight = 0.0;
 
+  // BMI判定結果の表示用変数
+  String bmiJudgement = '未計算';
+
   bool isMetric = true;
 
   // ② コントローラー変数の宣言 ★ここから追加★
@@ -99,9 +102,26 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
     // 理想体重の計算 (BMI 22として): 22 * (m * m) -> 結果は kg
     double idealKg = 22 * (heightInMeters * heightInMeters);
 
+    // 体型判定ロジック
+    String judgement;
+    if (bmi < 18.5) {
+      judgement = '低体重';
+    } else if (bmi < 25) {
+      judgement = '普通体重';
+    } else if (bmi < 30) {
+      judgement = '肥満（1度）-やや太りすぎ';
+    } else if (bmi < 35) {
+      judgement = '肥満（2度）-太りすぎ';
+    } else if (bmi < 40) {
+      judgement = '肥満（3度）-でっかいうんこしそうだね';
+    } else {
+      judgement = '肥満（4度）-怪物じゃんお前';
+    }
+
     // 3. 結果の表示と単位変換 (表示用)
     setState(() {
       bmiResult = bmi;
+      bmiJudgement = judgement;
 
       // 理想体重をユーザーの選択した単位に戻す
       if (isMetric) {
@@ -296,6 +316,21 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
                 color: Colors.red,
               ),
             ),
+            const SizedBox(height: 20),
+            // BMI判定結果の表示
+            Text(
+              bmiJudgement,
+              style: TextStyle(
+                fontSize: bmiJudgement == '肥満（4度）-怪物じゃんお前' ? 24 : 20,
+                fontWeight: FontWeight.w900,
+                color: bmiJudgement == '普通体重'
+                    ? Colors.green
+                    : bmiJudgement == '低体重'
+                    ? Colors.orange
+                    : Colors.red,
+              ),
+            ),
+
             const SizedBox(height: 10),
             Text(
               '理想体重: ${idealWeight.toStringAsFixed(1)} kg',
