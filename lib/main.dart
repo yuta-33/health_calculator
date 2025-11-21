@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import './record.dart';
+import './database_helper.dart';
+import 'package:intl/intl.dart';
 
 const double cmToFeet = 0.0328084;
 const double feetToCm = 30.48;
@@ -57,6 +60,8 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
   late final TextEditingController _heightController;
   late final TextEditingController _weightController;
 
+  List<Record> historyList = [];
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +69,15 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
     _ageController = TextEditingController(text: age.toString());
     _heightController = TextEditingController(text: height.toString());
     _weightController = TextEditingController(text: weight.toString());
+    _loadRecords();
+  }
+
+  // DBから全記録を読み込み、historyListを更新するメソッド
+  Future<void> _loadRecords() async {
+    final records = await DatabaseHelper.instance.readAllRecords();
+    setState(() {
+      historyList = records; // データベースから読み込んだ履歴でリストを上書き
+    });
   }
 
   @override
@@ -76,7 +90,7 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
   }
 
   // 計算を実行するメソッド (単位変換ロジック入り)
-  void calculate() {
+  void calculate() async {
     // 計算に使用するメートル法 (m, kg) のローカル変数
     double heightInMeters;
     double weightInKg = weight; // 初期値として現在の体重をセット
@@ -102,7 +116,7 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
     // 理想体重の計算 (BMI 22として): 22 * (m * m) -> 結果は kg
     double idealKg = 22 * (heightInMeters * heightInMeters);
 
-    // 体型判定ロジック
+    //3. 体型判定ロジック
     String judgement;
     if (bmi < 18.5) {
       judgement = '低体重';
@@ -118,7 +132,17 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
       judgement = '肥満（4度）-怪物じゃんお前';
     }
 
-    // 3. 結果の表示と単位変換 (表示用)
+    // データベースに記録を保存
+    final newRecord = Record(
+      dateTime: DateFormat(
+        'yyyy/MM/dd HH:mm',
+      ).format(DateTime.now()), // 日時を整形して保存
+      weight: weightInKg,
+      bmi: bmi,
+      judgement: judgement,
+    );
+    await DatabaseHelper.instance.create(newRecord); // DBに挿入
+    // 4. 結果の表示と単位変換 (表示用)
     setState(() {
       bmiResult = bmi;
       bmiJudgement = judgement;
@@ -139,210 +163,235 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('健康計算器')),
-      body: Center(
-        child: Column(
-          // 画面全体にコンテンツを配置するために、中央寄せを解除（または上に寄せます）
-          // mainAxisAlignment: MainAxisAlignment.center, を削除
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                '性別を選択してください',
+
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            // 画面全体にコンテンツを配置するために、中央寄せを解除（または上に寄せます）
+            // mainAxisAlignment: MainAxisAlignment.center, を削除
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  '性別を選択してください',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              // ② 性別選択ボタン (Rowとボタンを使って横並びにする)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 男性のボタン
+                  ElevatedButton(
+                    onPressed: () {
+                      // ③ 状態を更新する (setState)
+                      setState(() {
+                        selectedGender = 'male';
+                      });
+                    },
+                    // 選択されていたら青色、そうでなければ灰色にする
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: selectedGender == 'male'
+                          ? Colors.blue
+                          : Colors.grey,
+                    ),
+                    child: const Text('男性'),
+                  ),
+
+                  const SizedBox(width: 20), // ボタン間のスペース
+                  // 女性のボタン
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        selectedGender = 'female';
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: selectedGender == 'female'
+                          ? Colors.blue
+                          : Colors.grey,
+                    ),
+                    child: const Text('女性'),
+                  ),
+                ],
+              ),
+
+              // ★ここに追加★ 単位切り替えスイッチ
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('ヤード・ポンド法 (ft/lbf)'),
+                  Switch(
+                    value: isMetric,
+                    onChanged: (newValue) {
+                      setState(() {
+                        bool oldIsMetric = isMetric;
+                        isMetric = newValue;
+                        // 単位切り替え時に、入力値を一旦クリアするか、変換するかは次のステップで考慮
+                        // 今回はシンプルに、ラベル表示を切り替えるだけにします。
+                        // cm -> ft または ft -> cm の変換
+                        if (oldIsMetric && !isMetric) {
+                          // メートル法(cm)からヤード・ポンド法(ft)へ
+                          height = height * cmToFeet;
+                        } else if (!oldIsMetric && isMetric) {
+                          // ヤード・ポンド法(ft)からメートル法(cm)へ
+                          height = height * feetToCm;
+                        }
+
+                        // kg -> lbf または lbf -> kg の変換
+                        if (oldIsMetric && !isMetric) {
+                          // メートル法(kg)からヤード・ポンド法(lbf)へ
+                          weight = weight * kgToLbf;
+                        } else if (!oldIsMetric && isMetric) {
+                          // ヤード・ポンド法(lbf)からメートル法(kg)へ
+                          weight = weight * lbfToKg;
+                        }
+                      });
+                      // 3. コントローラーを更新して画面に反映させる（重要！）
+                      // TextEditingControllerはsetStateでは自動で更新されないため、手動で更新します
+                      _heightController.text = height.toStringAsFixed(1);
+                      _weightController.text = weight.toStringAsFixed(1);
+
+                      // 4. 計算結果も即座に更新する
+                      calculate();
+                    },
+                  ),
+                  const Text('メートル法 (cm/kg)'),
+                ],
+              ),
+
+              const SizedBox(height: 30), // ← この後に年齢のTextFieldが続く
+              // 年齢の入力欄
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: TextField(
+                  keyboardType: TextInputType.number, // 数字キーボードを表示
+                  decoration: const InputDecoration(
+                    labelText: '年齢 (歳)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    // 入力された値を状態変数にセット
+                    age = int.tryParse(value) ?? 0; // 数字に変換できなければ0にする
+                  },
+                  controller: _ageController,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // 身長の入力欄
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: TextField(
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: isMetric ? '身長 (cm)' : '身長 (ft)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    height = double.tryParse(value) ?? 0.0;
+                  },
+                  controller: _heightController,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // 体重の入力欄
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: TextField(
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: isMetric ? '体重 (kg)' : '体重 (lbf)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    weight = double.tryParse(value) ?? 0.0;
+                  },
+                  controller: _weightController,
+                ),
+              ),
+
+              // 体重のTextFieldの直後に追加
+              const SizedBox(height: 40),
+
+              // 計算ボタン
+              ElevatedButton(
+                onPressed: calculate, // 上で定義した calculate メソッドを呼び出す
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 50,
+                    vertical: 15,
+                  ),
+                  textStyle: const TextStyle(fontSize: 20),
+                ),
+                child: const Text('結果を計算する'),
+              ),
+
+              const SizedBox(height: 40),
+
+              // 計算結果の表示
+              Text(
+                'あなたのBMI: ${bmiResult.toStringAsFixed(1)}', // 小数点第1位まで表示
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // BMI判定結果の表示
+              Text(
+                bmiJudgement,
+                style: TextStyle(
+                  fontSize: bmiJudgement == '肥満（4度）-怪物じゃんお前' ? 24 : 20,
+                  fontWeight: FontWeight.w900,
+                  color: bmiJudgement == '普通体重'
+                      ? Colors.green
+                      : bmiJudgement == '低体重'
+                      ? Colors.orange
+                      : Colors.red,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+              Text(
+                '理想体重: ${idealWeight.toStringAsFixed(1)} kg',
+                style: const TextStyle(fontSize: 20, color: Colors.green),
+              ),
+
+              // ④ 現在の選択状態を表示 (デバッグ用)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text('現在の選択: $selectedGender'),
+              ),
+              // 履歴リストの表示
+              // ListをWidgetのリストに変換し、Columnの子要素として展開
+              const SizedBox(height: 50),
+              const Text(
+                '--- 計算履歴 ---',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
 
-            // ② 性別選択ボタン (Rowとボタンを使って横並びにする)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 男性のボタン
-                ElevatedButton(
-                  onPressed: () {
-                    // ③ 状態を更新する (setState)
-                    setState(() {
-                      selectedGender = 'male';
-                    });
-                  },
-                  // 選択されていたら青色、そうでなければ灰色にする
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: selectedGender == 'male'
-                        ? Colors.blue
-                        : Colors.grey,
-                  ),
-                  child: const Text('男性'),
-                ),
+              ...historyList.map((record) {
+                // Recordオブジェクトを使って表示を整形
+                return ListTile(
+                  title: Text(
+                    '${record.dateTime} - ${record.judgement}',
+                  ), // 日時と判定を表示
+                  subtitle: Text(
+                    'BMI: ${record.bmi.toStringAsFixed(1)} / W: ${record.weight.toStringAsFixed(1)} kg',
+                  ), // 詳細を表示
+                );
+              }).toList(),
 
-                const SizedBox(width: 20), // ボタン間のスペース
-                // 女性のボタン
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      selectedGender = 'female';
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: selectedGender == 'female'
-                        ? Colors.blue
-                        : Colors.grey,
-                  ),
-                  child: const Text('女性'),
-                ),
-              ],
-            ),
-
-            // ★ここに追加★ 単位切り替えスイッチ
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('ヤード・ポンド法 (ft/lbf)'),
-                Switch(
-                  value: isMetric,
-                  onChanged: (newValue) {
-                    setState(() {
-                      bool oldIsMetric = isMetric;
-                      isMetric = newValue;
-                      // 単位切り替え時に、入力値を一旦クリアするか、変換するかは次のステップで考慮
-                      // 今回はシンプルに、ラベル表示を切り替えるだけにします。
-                      // cm -> ft または ft -> cm の変換
-                      if (oldIsMetric && !isMetric) {
-                        // メートル法(cm)からヤード・ポンド法(ft)へ
-                        height = height * cmToFeet;
-                      } else if (!oldIsMetric && isMetric) {
-                        // ヤード・ポンド法(ft)からメートル法(cm)へ
-                        height = height * feetToCm;
-                      }
-
-                      // kg -> lbf または lbf -> kg の変換
-                      if (oldIsMetric && !isMetric) {
-                        // メートル法(kg)からヤード・ポンド法(lbf)へ
-                        weight = weight * kgToLbf;
-                      } else if (!oldIsMetric && isMetric) {
-                        // ヤード・ポンド法(lbf)からメートル法(kg)へ
-                        weight = weight * lbfToKg;
-                      }
-                    });
-                    // 3. コントローラーを更新して画面に反映させる（重要！）
-                    // TextEditingControllerはsetStateでは自動で更新されないため、手動で更新します
-                    _heightController.text = height.toStringAsFixed(1);
-                    _weightController.text = weight.toStringAsFixed(1);
-
-                    // 4. 計算結果も即座に更新する
-                    calculate();
-                  },
-                ),
-                const Text('メートル法 (cm/kg)'),
-              ],
-            ),
-
-            const SizedBox(height: 30), // ← この後に年齢のTextFieldが続く
-            // 年齢の入力欄
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: TextField(
-                keyboardType: TextInputType.number, // 数字キーボードを表示
-                decoration: const InputDecoration(
-                  labelText: '年齢 (歳)',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (value) {
-                  // 入力された値を状態変数にセット
-                  age = int.tryParse(value) ?? 0; // 数字に変換できなければ0にする
-                },
-                controller: _ageController,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // 身長の入力欄
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: TextField(
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: isMetric ? '身長 (cm)' : '身長 (ft)',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (value) {
-                  height = double.tryParse(value) ?? 0.0;
-                },
-                controller: _heightController,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // 体重の入力欄
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: TextField(
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: isMetric ? '体重 (kg)' : '体重 (lbf)',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (value) {
-                  weight = double.tryParse(value) ?? 0.0;
-                },
-                controller: _weightController,
-              ),
-            ),
-
-            // 体重のTextFieldの直後に追加
-            const SizedBox(height: 40),
-
-            // 計算ボタン
-            ElevatedButton(
-              onPressed: calculate, // 上で定義した calculate メソッドを呼び出す
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 50,
-                  vertical: 15,
-                ),
-                textStyle: const TextStyle(fontSize: 20),
-              ),
-              child: const Text('結果を計算する'),
-            ),
-
-            const SizedBox(height: 40),
-
-            // 計算結果の表示
-            Text(
-              'あなたのBMI: ${bmiResult.toStringAsFixed(1)}', // 小数点第1位まで表示
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.red,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // BMI判定結果の表示
-            Text(
-              bmiJudgement,
-              style: TextStyle(
-                fontSize: bmiJudgement == '肥満（4度）-怪物じゃんお前' ? 24 : 20,
-                fontWeight: FontWeight.w900,
-                color: bmiJudgement == '普通体重'
-                    ? Colors.green
-                    : bmiJudgement == '低体重'
-                    ? Colors.orange
-                    : Colors.red,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-            Text(
-              '理想体重: ${idealWeight.toStringAsFixed(1)} kg',
-              style: const TextStyle(fontSize: 20, color: Colors.green),
-            ),
-
-            // ④ 現在の選択状態を表示 (デバッグ用)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text('現在の選択: $selectedGender'),
-            ),
-          ],
+              const SizedBox(height: 50), // 最下部の余白
+            ],
+          ),
         ),
       ),
     );
