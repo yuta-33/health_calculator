@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import './record.dart';
 import './database_helper.dart';
 import 'package:intl/intl.dart';
+import './calender_page.dart';
+import './milestone_page.dart';
 
 const double cmToFeet = 0.0328084;
 const double feetToCm = 30.48;
@@ -363,15 +365,62 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
                 '理想体重: ${idealWeight.toStringAsFixed(1)} kg',
                 style: const TextStyle(fontSize: 20, color: Colors.green),
               ),
+              const SizedBox(height: 30),
 
+              // ★カレンダー画面へのボタン★
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    // 画面遷移を実行
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CalendarPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.calendar_today),
+                label: const Text('履歴をカレンダーで確認'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  backgroundColor: Colors.blueGrey,
+                ),
+              ),
+
+              const SizedBox(height: 50), // スペース調整
+              // ★マイルストーン画面へのボタン★
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    // 画面遷移を実行
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const MilestonePage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.track_changes),
+                label: const Text('目標進捗を確認'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  backgroundColor: Colors.teal,
+                ),
+              ),
+
+              const SizedBox(height: 50), // スペース調整
               // ④ 現在の選択状態を表示 (デバッグ用)
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text('現在の選択: $selectedGender'),
               ),
+
               // 履歴リストの表示
               // ListをWidgetのリストに変換し、Columnの子要素として展開
-              const SizedBox(height: 50),
+
+              // lib/main.dart の build メソッド内のカレンダーボタンの下に追記
+
+              // ... (カレンダー画面へのボタンのコード) ...
+              const SizedBox(height: 10), // スペース
+              // ... (計算履歴の表示が続く) ...
               const Text(
                 '--- 計算履歴 ---',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -385,7 +434,7 @@ class _HealthCalculatorPageState extends State<HealthCalculatorPage> {
                   ), // 日時と判定を表示
                   subtitle: Text(
                     'BMI: ${record.bmi.toStringAsFixed(1)} / W: ${record.weight.toStringAsFixed(1)} kg',
-                  ), // 詳細を表示
+                  ), // 詳細adを表示
                 );
               }).toList(),
 

@@ -37,6 +37,7 @@ dependencies:
   sqflite: ^2.3.0 # SQLiteデータベースを扱うためのコアパッケージ
   path: ^1.8.3    # OS上のファイルパスを取得するためのパッケージ
   intl: ^0.18.1   # 日付のフォーマットに使用するパッケージ
+  table_calendar: ^3.0.9 # カレンダー表示用のパッケージ
 
 dev_dependencies:
   flutter_test:
